@@ -13,8 +13,5 @@
             "name": "wilbispaulo",
             "email": "wilbispaulo@hotmail.com"
         }
-    ],
-    "require": {
-        "doctrine/dbal": "^4.2"
-    }
+    ]
 }

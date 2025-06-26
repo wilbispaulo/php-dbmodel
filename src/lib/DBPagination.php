@@ -1,6 +1,6 @@
 <?php
 
-namespace Wilbispaulo\DBmodel;
+namespace Wilbispaulo\DBmodel\lib;
 
 class DBPagination
 {

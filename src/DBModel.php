@@ -1,22 +1,26 @@
 <?php
 
-namespace Wilbispaulo\DBmodel;
+namespace app\database\models;
 
-use Doctrine\DBAL\Exception;
+use PDO;
+use PDOException;
+use Wilbispaulo\DBmodel\lib\DBConnection;
+use Wilbispaulo\DBmodel\lib\DBFilters;
+use Wilbispaulo\DBmodel\lib\DBPagination;
 
-class DBModel
+abstract class Model
 {
-    protected string $table;
     private mixed $fields = '*';
     private ?DBFilters $filters = null;
     private string $pagination = '';
+    protected string $table;
 
     public function __construct(
-        private $dbName,
-        private $user,
-        private $password,
         private $host,
-        private $driver
+        private $port,
+        private $dbName,
+        private $username,
+        private $password
     ) {}
 
     public function getTable()
@@ -40,18 +44,47 @@ class DBModel
         $this->pagination = $pagination->dump();
     }
 
-    public function create(array $valuesAssoc): int|string|false
+    public function create(array $valuesAssoc): bool
     {
         try {
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $fields = array_keys($valuesAssoc);
+            $sql = "insert into {$this->table} (" . implode(', ', $fields) . ") values (:" . implode(', :', $fields) . ")";
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            return $connection->insert($this->table, $valuesAssoc);
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+            $prepare = $connection->prepare($sql);
+
+            return $prepare->execute($valuesAssoc);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    public function fetchAllObj(): array|false
+    {
+        try {
+            if (is_array($this->fields)) {
+                $fields = implode(', ', $this->fields);
+            } else {
+                $fields = $this->fields;
+            }
+            $sql = "select {$fields} from {$this->table}{$this->filters?->dump()}{$this->pagination}";
+
+            $connection = DBConnection::connect(
+                $this->host,
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+            $prepare = $connection->prepare($sql);
+            $prepare->execute(empty($this->filters) ? [] : $this->filters->getBind());
+            return $prepare->fetchAll(PDO::FETCH_CLASS, get_called_class());
+        } catch (PDOException $e) {
             return false;
         }
     }
@@ -64,18 +97,19 @@ class DBModel
             } else {
                 $fields = $this->fields;
             }
-            $sql = "SELECT {$fields} FROM {$this->table}{$this->filters?->dump()}{$this->pagination}";
+            $sql = "select {$fields} from {$this->table}{$this->filters?->dump()}{$this->pagination}";
 
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            $stmt = $connection->executeQuery($sql, empty($this->filters) ? [] : $this->filters->getBind());
-            return $stmt->fetchAllAssociative();
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+            $prepare = $connection->prepare($sql);
+            $prepare->execute(empty($this->filters) ? [] : $this->filters->getBind());
+            return $prepare->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
             return false;
         }
     }
@@ -90,89 +124,124 @@ class DBModel
             }
 
             $sql = (empty($this->filters)) ?
-                "SELECT {$fields} FROM {$this->table} WHERE {$field} = :{$field}" :
-                "SELECT {$fields} FROM {$this->table} {$this->filters?->dump()}";
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+                "select {$fields} from {$this->table} where {$field} = :{$field}" :
+                "select {$fields} from {$this->table} {$this->filters?->dump()}";
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            $stmt = $connection->executeQuery($sql, empty($this->filters) ? [$field => $value] : $this->filters->getBind());
-            return $stmt->fetchAllAssociative();
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+            $prepare->execute(empty($this->filters) ? [$field => $value] : $this->filters->getBind());
+            return $prepare->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    public function findByObj(string $field = '', mixed $value = ''): object|false
+    {
+        try {
+            $sql = (empty($this->filters)) ?
+                "select {$this->fields} from {$this->table} where {$field} = :{$field}" :
+                "select {$this->fields} from {$this->table} {$this->filters?->dump()}";
+
+            $connection = DBConnection::connect(
+                $this->host,
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+            $prepare->execute(empty($this->filters) ? [$field => $value] : $this->filters->getBind());
+            return $prepare->fetchObject(get_called_class());
+        } catch (PDOException $e) {
             return false;
         }
     }
 
     // update users set firstName = :firstName, lastName = 'Prado', password = '8888' where id = 5
-    public function update(array $fieldsValuesAssoc, string $fieldFilter = '', mixed $valueFilter = ''): int|string|false
+    public function update(array $fieldsValuesAssoc, string $fieldFilter = '', mixed $valueFilter = ''): bool
     {
         try {
-            $sql = "UPDATE {$this->table} SET";
+            $sql = "update {$this->table} set";
             foreach ($fieldsValuesAssoc as $key => $valueAssoc) {
                 $sql .= " {$key} = :{$key},";
                 $valuesAssoc[":{$key}"] = $valueAssoc;
             }
             $sql = rtrim($sql, ",");
             if (empty($this->filters)) {
-                $sql .= " WHERE {$fieldFilter} = :{$fieldFilter}";
+                $sql .= " where {$fieldFilter} = :{$fieldFilter}";
                 $valuesAssoc[":{$fieldFilter}"] = $valueFilter;
             } else {
                 $sql .= "{$this->filters?->dump()}";
                 $valuesAssoc = array_merge($valuesAssoc, $this->filters->getBind());
             }
 
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            return $connection->executeStatement($sql, empty($this->filters) ? [] : $this->filters->getBind());
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+
+            return $prepare->execute($valuesAssoc);
+        } catch (PDOException $e) {
             return false;
         }
     }
 
     // delete from users where id = 12
-    public function delete(string $field = '', string|int $value = ''): int|string|false
+    public function delete(string $field = '', string|int $value = ''): bool
     {
         try {
             $sql = (empty($this->filters)) ?
-                "DELETE FROM {$this->table} WHERE {$field} = :{$field}" :
-                "DELETE FROM {$this->table} {$this->filters?->dump()}";
+                "delete from {$this->table} where {$field} = :{$field}" :
+                "delete from {$this->table} {$this->filters?->dump()}";
 
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            return $connection->executeStatement($sql, empty($this->filters) ? [$field => $value] : $this->filters->getBind());
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+
+            return $prepare->execute(empty($this->filters) ? [$field => $value] : $this->filters->getBind());
+        } catch (PDOException $e) {
             return false;
         }
     }
 
-    public function first(string $field, string $dir = 'asc'): array|false
+    public function first(string $field, string $dir = 'asc'): object|false
     {
         try {
-            $sql = "SELECT {$this->fields} FROM {$this->table} ORDER BY {$field} {$dir} LIMIT 1";
+            $sql = "select {$this->fields} from {$this->table} order by {$field} {$dir} limit 1";
 
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            $stmt = $connection->executeQuery($sql, empty($this->filters) ? [] : $this->filters->getBind());
-            return $stmt->fetchAllAssociative();
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+
+            $prepare->execute();
+
+            return $prepare->fetchObject(get_called_class());
+        } catch (PDOException $e) {
             return false;
         }
     }
@@ -180,17 +249,21 @@ class DBModel
     public function count(): mixed
     {
         try {
-            $sql = "SELECT COUNT({$this->fields}) FROM {$this->table}{$this->filters?->dump()}";
+            $sql = "select count({$this->fields}) from {$this->table}{$this->filters?->dump()}";
 
-            $connection = new DBConnection(
-                $this->dbName,
-                $this->user,
-                $this->password,
+            $connection = DBConnection::connect(
                 $this->host,
-                $this->driver,
-            )->Connect();
-            return $connection->fetchOne($sql, empty($this->filters) ? [] : $this->filters->getBind());
-        } catch (Exception $e) {
+                $this->port,
+                $this->dbName,
+                $this->username,
+                $this->password
+            );
+
+            $prepare = $connection->prepare($sql);
+            $prepare->execute(empty($this->filters) ? [] : $this->filters->getBind());
+
+            return $prepare->fetchColumn();
+        } catch (PDOException $e) {
             return false;
         }
     }
