@@ -1,0 +1,20 @@
+{
+    "name": "wilbispaulo/php-dbmodel",
+    "description": "Classe base para extender as classes de acesso às tabelas do BD",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Wilbispaulo\\DBmodel\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "wilbispaulo",
+            "email": "wilbispaulo@hotmail.com"
+        }
+    ],
+    "require": {
+        "doctrine/dbal": "^4.2"
+    }
+}
