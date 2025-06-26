@@ -10,18 +10,29 @@ use Wilbispaulo\DBmodel\lib\DBPagination;
 
 abstract class DBModel
 {
+    private $host = '';
+    private $port = 0;
+    private $dbName = '';
+    private $username = '';
+    private $password = '';
     private mixed $fields = '*';
     private ?DBFilters $filters = null;
     private string $pagination = '';
     protected string $table;
 
-    public function __construct(
-        private $host,
-        private $port,
-        private $dbName,
-        private $username,
-        private $password
-    ) {}
+    public function setConnection(
+        string $host,
+        int $port,
+        string $dbName,
+        string $username,
+        string $password
+    ) {
+        $this->host = $host;
+        $this->port = $port;
+        $this->dbName = $dbName;
+        $this->username = $username;
+        $this->password = $password;
+    }
 
     public function getTable()
     {
