@@ -1,6 +1,6 @@
 <?php
 
-namespace app\database\models;
+namespace Wilbispaulo\DBmodel;
 
 use PDO;
 use PDOException;
