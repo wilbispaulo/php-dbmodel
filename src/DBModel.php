@@ -8,7 +8,7 @@ use Wilbispaulo\DBmodel\lib\DBConnection;
 use Wilbispaulo\DBmodel\lib\DBFilters;
 use Wilbispaulo\DBmodel\lib\DBPagination;
 
-abstract class Model
+abstract class DBModel
 {
     private mixed $fields = '*';
     private ?DBFilters $filters = null;
