@@ -81,4 +81,10 @@ class DBFilters
 
         return rtrim($filter);
     }
+
+    public function clear()
+    {
+        $this->filters = [];
+        $this->binds = [];
+    }
 }
